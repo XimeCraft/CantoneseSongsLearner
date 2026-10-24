@@ -18,3 +18,16 @@ This application is designed to help users improve their Cantonese prounciation 
 
 ## Note
 Please be aware that the application uses web crawling to get Chinese lyrics and corresponding Cantonese pinyin from a website which already contains that information and it's not 100% accurate. It's important to note that the application is for practice and reference only and should not be used as an official source for Cantonese pinyin.
+
+## Setup
+Requires [uv](https://docs.astral.sh/uv/) (macOS; the UI uses `tkmacosx`).
+
+```bash
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+# uv's standalone Python can't locate Tcl/Tk from inside a venv; link them in:
+PY_LIB="$(.venv/bin/python -c 'import sys; print(sys.base_prefix)')/lib"
+ln -s "$PY_LIB/tcl8.6" "$PY_LIB/tk8.6" .venv/lib/
+
+.venv/bin/python app.py
+```
