@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 from datetime import date, datetime
 from tkinter import *
 from tkinter import messagebox, ttk
@@ -7,6 +8,7 @@ from tkinter import messagebox, ttk
 import pandas as pd
 from pinyin import get
 
+import jyutping
 import learnCantonese as lc
 import theme
 from progress import Progress
@@ -71,6 +73,28 @@ def until(iso):
         return 'today'
     return 'tomorrow' if days == 1 else f'in {days} days'
 
+def is_chinese(char):
+    return '\u4e00' <= char <= '\u9fff' or '\u3400' <= char <= '\u4dbf'
+
+def sound_columns(pinyin, toned):
+    """Initial, final and tone columns for a word book entry.
+    Words with alternatives like sang/saang list every initial, final and tone.
+    """
+    parts = [p for p in (jyutping.split(x) for x in pinyin.split('/')) if p is not None]
+    initials = list(dict.fromkeys(i for i, _ in parts)) or ['?']
+    finals = list(dict.fromkeys(f for _, f in parts)) or ['?']
+    tones = list(dict.fromkeys(re.findall(r'\d+', toned))) or ['']
+    key = jyutping.sort_key(*parts[0]) if parts else jyutping.sort_key('?', '?')
+
+    return {
+        'initial': ' / '.join(i or '—' for i in initials),
+        'final': ' / '.join(finals),
+        'tone': ' / '.join(tones) or '—',
+        '_initials': initials, '_finals': finals, '_tones': tones,
+        '_initial_key': key[0], '_final_key': key[1],
+        '_tone_key': int(tones[0]) if tones[0] else 99,
+    }
+
 def level_dots(box):
     return '●' * box + '○' * (5 - box)
 
@@ -102,46 +126,173 @@ def header(page, title, back):
 
 
 class SortableTree(Frame):
-    """Treeview with a scrollbar; clicking a column header sorts by it."""
+    """Treeview with a scrollbar.
+    -- Click a header to sort by it, Shift-click to add it as the next sort level
+    -- Right-click a header to filter by its values
+    -- Drag a header border: the left column gets narrower and the right one wider
+    """
 
-    def __init__(self, parent, columns, sort_keys, sort_state):
+    MIN_WIDTH = 36
+
+    def __init__(self, parent, columns, sort_keys, view, default_sort,
+                 filter_tokens=None, token_keys=None, on_change=None):
         super().__init__(parent)
         self.columns = columns
+        self.titles = {c[0]: c[1] for c in columns}
         self.sort_keys = sort_keys
-        self.sort_state = sort_state       # dict {'col': ..., 'reverse': ...}, kept by the caller
+        self.default_sort = default_sort
+        self.filter_tokens = filter_tokens or {}     # col -> values a row can be filtered by
+        self.token_keys = token_keys or {}           # col -> order of those values in the filter list
+        self.on_change = on_change
         self.rows = []
+        self._drag = None
+        self._pressed_heading = False
+
+        # sorting, filters and widths are kept by the caller, so they survive page changes
+        self.view = view
+        view.setdefault('sort', list(default_sort))
+        view.setdefault('filters', {})
+        view.setdefault('widths', {})
 
         self.tree = ttk.Treeview(self, columns=[c[0] for c in columns], show='headings', selectmode='browse')
         for col, title, width, anchor in columns:
-            self.tree.heading(col, text=title, command=lambda c=col: self.sort_by(c))
-            self.tree.column(col, width=width, anchor=anchor, stretch=(anchor == W))
+            self.tree.heading(col, text=title)
+            self.tree.column(col, width=view['widths'].get(col, width), minwidth=self.MIN_WIDTH,
+                             anchor=anchor, stretch=True)
 
         scrollbar = ttk.Scrollbar(self, orient=VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         self.tree.pack(side=LEFT, fill=BOTH, expand=1)
         scrollbar.pack(side=RIGHT, fill=Y)
 
-    def set_rows(self, rows):
-        """rows: list of (iid, values dict, tags)"""
-        self.rows = rows
-        self.refresh()
+        self.tree.bind('<ButtonPress-1>', self.on_press)
+        self.tree.bind('<B1-Motion>', self.on_drag)
+        self.tree.bind('<ButtonRelease-1>', self.on_release)
+        for sequence in ('<Button-2>', '<Button-3>', '<Control-Button-1>'):
+            self.tree.bind(sequence, self.on_right_click)
 
-    def sort_by(self, col):
+    # --------------------------------------------------------------
+    #  Mouse on the header
+    # --------------------------------------------------------------
+
+    def column_at(self, x):
+        n = int(self.tree.identify_column(x)[1:]) - 1
+        return self.columns[n][0] if 0 <= n < len(self.columns) else None
+
+    def border_at(self, x):
+        """Index of the column whose right border is at x (the last column's border can't move)."""
+        right = 0
+        for n, (col, *_) in enumerate(self.columns[:-1]):
+            right += self.tree.column(col, 'width')
+            if abs(x - right) <= 6:
+                return n
+        return None
+
+    def on_press(self, e):
+        region = self.tree.identify_region(e.x, e.y)
+        self._pressed_heading = region == 'heading'
+
+        if region == 'separator':
+            n = self.border_at(e.x)
+            if n is not None:
+                left, right = self.columns[n][0], self.columns[n + 1][0]
+                self._drag = (left, right, e.x, self.tree.column(left, 'width'), self.tree.column(right, 'width'))
+            return 'break'
+
+    def on_drag(self, e):
+        if self._drag is None:
+            return
+        left, right, x0, w_left, w_right = self._drag
+        delta = max(self.MIN_WIDTH - w_left, min(e.x - x0, w_right - self.MIN_WIDTH))
+        self.tree.column(left, width=w_left + delta)
+        self.tree.column(right, width=w_right - delta)
+        return 'break'
+
+    def on_release(self, e):
+        if self._drag is not None:
+            self._drag = None
+            self.view['widths'] = {c[0]: self.tree.column(c[0], 'width') for c in self.columns}
+            return 'break'
+
+        if self._pressed_heading and self.tree.identify_region(e.x, e.y) == 'heading':
+            col = self.column_at(e.x)
+            if col:
+                self.sort_by(col, add=bool(e.state & 0x1))     # 0x1 = Shift held
+
+    def on_right_click(self, e):
+        if self.tree.identify_region(e.x, e.y) == 'heading':
+            col = self.column_at(e.x)
+            if col and col != 'no':
+                FilterPopup(self, col, e.x_root, e.y_root)
+            return 'break'
+
+    # --------------------------------------------------------------
+    #  Sorting and filtering
+    # --------------------------------------------------------------
+
+    def sort_by(self, col, add=False):
+        """Click: sort by col only (again: reverse).
+        Shift-click: add col as the next level (again: reverse, third time: remove it).
+        """
         if col not in self.sort_keys:
             return
-        if self.sort_state['col'] == col:
-            self.sort_state['reverse'] = not self.sort_state['reverse']
+        sort = self.view['sort']
+        cols = [c for c, _ in sort]
+
+        if not add or sort == self.default_sort:
+            if cols == [col]:
+                sort[0] = (col, not sort[0][1])
+            else:
+                sort[:] = [(col, False)]
+        elif col not in cols:
+            sort.append((col, False))
+        elif not sort[cols.index(col)][1]:
+            sort[cols.index(col)] = (col, True)
         else:
-            self.sort_state.update(col=col, reverse=False)
+            sort.pop(cols.index(col))
+            if not sort:
+                sort[:] = list(self.default_sort)
+
+        self.refresh()
+
+    def tokens(self, col, values):
+        fn = self.filter_tokens.get(col)
+        return fn(values) if fn else [str(values[col])]
+
+    def token_key(self, col):
+        return self.token_keys.get(col, lambda t: (0, int(t), '') if t.isdigit() else (1, 0, t))
+
+    def visible_rows(self, skip=None):
+        """Rows passing every filter (except the one on column skip)."""
+        filters = {c: allowed for c, allowed in self.view['filters'].items() if c != skip}
+        return [r for r in self.rows
+                if all(any(t in allowed for t in self.tokens(c, r[1])) for c, allowed in filters.items())]
+
+    def reset(self):
+        self.view['sort'][:] = list(self.default_sort)
+        self.view['filters'].clear()
+        self.view['widths'].clear()
+        for col, _, width, _ in self.columns:
+            self.tree.column(col, width=width)
         self.refresh()
 
     def refresh(self, select=None):
-        col, reverse = self.sort_state['col'], self.sort_state['reverse']
-        rows = sorted(self.rows, key=lambda r: self.sort_keys[col](r[1]), reverse=reverse)
+        rows = self.visible_rows()
 
-        for c, title, _, _ in self.columns:
-            arrow = (' ▼' if reverse else ' ▲') if c == col else ''
-            self.tree.heading(c, text=title + arrow)
+        # stable sorts from the last level to the first give a multi-level sort
+        sort = self.view['sort']
+        for col, reverse in reversed(sort):
+            rows.sort(key=lambda r: self.sort_keys[col](r[1]), reverse=reverse)
+
+        levels = {c: (n, reverse) for n, (c, reverse) in enumerate(sort)}
+        for col, title, _, _ in self.columns:
+            text = title
+            if col in levels:
+                n, reverse = levels[col]
+                text += (' ▼' if reverse else ' ▲') + (str(n + 1) if len(sort) > 1 else '')
+            if col in self.view['filters']:
+                text += ' ●'
+            self.tree.heading(col, text=text)
 
         self.tree.delete(*self.tree.get_children())
         for n, (iid, values, tags) in enumerate(rows):
@@ -152,9 +303,118 @@ class SortableTree(Frame):
             self.tree.selection_set(select)
             self.tree.see(select)
 
+        if self.on_change:
+            self.on_change(len(rows), len(self.rows))
+
     def selected(self):
         selection = self.tree.selection()
         return selection[0] if selection else None
+
+
+class FilterPopup(Toplevel):
+    """Checklist of a column's values; only rows with a checked value are shown."""
+
+    def __init__(self, table, col, x, y):
+        super().__init__(table, bg=C['bg'])
+        self.table, self.col = table, col
+        self.title('Filter')
+        self.transient(table.winfo_toplevel())
+        self.resizable(False, False)
+        self.geometry(f'+{x}+{y}')
+
+        # counts respect the other columns' filters, like a spreadsheet
+        counts = {}
+        for r in table.visible_rows(skip=col):
+            for t in table.tokens(col, r[1]):
+                counts[t] = counts.get(t, 0) + 1
+        every = {t for r in table.rows for t in table.tokens(col, r[1])}
+        self.order = sorted(every, key=table.token_key(col))
+        self.counts = counts
+        self.checked = set(table.view['filters'].get(col, every))
+
+        label(self, f'Filter by {table.titles[col]}', size=15, weight='bold').pack(anchor=W, padx=14, pady=(12, 6))
+
+        self.search = StringVar()
+        self.search.trace_add('write', lambda *_: self.fill())
+        search_box = Entry(self, textvariable=self.search, width=24)
+        search_box.pack(fill=X, padx=14, ipady=3)
+
+        row = Frame(self)
+        row.pack(fill=X, padx=14, pady=6)
+        button(row, 'All', lambda: self.set_all(True), width=70).pack(side=LEFT)
+        button(row, 'None', lambda: self.set_all(False), width=70).pack(side=LEFT, padx=6)
+
+        listframe = Frame(self)
+        listframe.pack(padx=14)
+        self.lb = Listbox(listframe, selectmode=MULTIPLE, exportselection=False, activestyle='none',
+                          height=min(12, max(len(self.order), 3)), width=26)
+        scrollbar = ttk.Scrollbar(listframe, orient=VERTICAL, command=self.lb.yview)
+        self.lb.configure(yscrollcommand=scrollbar.set)
+        self.lb.pack(side=LEFT)
+        scrollbar.pack(side=RIGHT, fill=Y)
+        self.lb.bind('<<ListboxSelect>>', self.on_select)
+
+        self.status = label(self, '', size=12, color='muted')
+        self.status.pack(anchor=W, padx=14, pady=4)
+
+        buttonframe = Frame(self)
+        buttonframe.pack(pady=(2, 12))
+        button(buttonframe, 'Apply', self.apply, width=90, accent=True).pack(side=LEFT, padx=5)
+        button(buttonframe, 'Clear Filter', self.clear, width=110).pack(side=LEFT, padx=5)
+
+        self.bind('<Return>', lambda e: self.apply())
+        self.bind('<Escape>', lambda e: self.destroy())
+        self.fill()
+        search_box.focus_set()
+        self.grab_set()
+
+    @staticmethod
+    def display(token):
+        return token if token != '' else '—'
+
+    def fill(self):
+        query = self.search.get().strip().lower()
+        self.shown = [t for t in self.order if query in self.display(t).lower()]
+        self.lb.delete(0, END)
+        for n, t in enumerate(self.shown):
+            self.lb.insert(END, f'{self.display(t)}    ({self.counts.get(t, 0)})')
+            if t in self.checked:
+                self.lb.selection_set(n)
+        self.update_status()
+
+    def on_select(self, e=None):
+        selected = set(self.lb.curselection())
+        for n, t in enumerate(self.shown):
+            if n in selected:
+                self.checked.add(t)
+            else:
+                self.checked.discard(t)
+        self.update_status()
+
+    def set_all(self, on):
+        """All / None act on the values currently listed (after search)."""
+        for t in self.shown:
+            if on:
+                self.checked.add(t)
+            else:
+                self.checked.discard(t)
+        self.fill()
+
+    def update_status(self):
+        self.status.config(text=f'{len(self.checked)} of {len(self.order)} values selected')
+
+    def apply(self):
+        if self.checked >= set(self.order):
+            self.table.view['filters'].pop(self.col, None)
+        else:
+            self.table.view['filters'][self.col] = set(self.checked)
+        self.destroy()
+        self.table.refresh()
+
+    def clear(self):
+        self.table.view['filters'].pop(self.col, None)
+        self.destroy()
+        self.table.refresh()
 
 
 # ------------------------------------------------------------------
@@ -229,12 +489,12 @@ class SongsPage(Page):
         search_box.pack(side=RIGHT, padx=10, ipady=4)
         label(bar, 'Search', size=13, color='muted').pack(side=RIGHT)
 
-        self.table = SortableTree(self, self.COLUMNS, self.SORT_KEYS, app.song_sort)
+        self.table = SortableTree(self, self.COLUMNS, self.SORT_KEYS, app.song_view, [('song', False)])
         self.table.pack(fill=BOTH, expand=1, padx=16, pady=6)
         self.table.tree.bind('<Double-1>', lambda e: self.play())
         self.table.tree.bind('<Return>', lambda e: self.play())
 
-        label(self, 'Click a column header to sort  ·  double-click a song to practise',
+        label(self, 'Click header: sort  ·  Shift-click: add sort level  ·  right-click: filter  ·  drag header border: resize',
               size=12, color='muted').pack()
 
         buttonframe = Frame(self)
@@ -242,6 +502,7 @@ class SongsPage(Page):
         button(buttonframe, 'Play Cantonese', self.play, accent=True).pack(side=LEFT, padx=8)
         button(buttonframe, 'Show Lyrics', self.show_lyrics).pack(side=LEFT, padx=8)
         button(buttonframe, 'Delete Song', self.delete_song).pack(side=LEFT, padx=8)
+        button(buttonframe, 'Reset View', self.table.reset, width=110).pack(side=LEFT, padx=8)
 
         self.load_rows(select)
         search_box.focus_set()
@@ -571,8 +832,8 @@ class PracticePage(Page):
             self.t.insert(END, en_l[w], 'warning')
             self.t.insert(END, '  ')
 
-            # some lyric lines have more syllables than characters
-            if w >= len(cn_w):
+            # some lyric lines have more syllables than characters, or brackets and letters
+            if w >= len(cn_w) or not is_chinese(cn_w[w]):
                 continue
 
             # add to word book
@@ -604,21 +865,41 @@ class PracticePage(Page):
 class WordsPage(Page):
 
     COLUMNS = [
-        ('no', '#', 50, CENTER),
-        ('word', 'Word', 80, CENTER),
-        ('pinyin', 'Pinyin', 140, W),
-        ('count', 'Mistakes', 100, CENTER),
-        ('level', 'Level', 120, CENTER),
-        ('due', 'Next review', 130, CENTER),
+        ('no', '#', 40, CENTER),
+        ('word', 'Word', 56, CENTER),
+        ('pinyin', 'Pinyin', 112, W),
+        ('initial', '声母', 56, CENTER),
+        ('final', '韵母', 70, CENTER),
+        ('tone', '声调', 50, CENTER),
+        ('count', 'Mistakes', 84, CENTER),
+        ('level', 'Level', 100, CENTER),
+        ('due', 'Next review', 108, CENTER),
     ]
 
     SORT_KEYS = {
         'no': lambda v: v['_order'],
         'word': lambda v: get(v['word']),
         'pinyin': lambda v: v['pinyin'],
+        # initials and finals in Jyutping table order
+        'initial': lambda v: v['_initial_key'],
+        'final': lambda v: v['_final_key'],
+        'tone': lambda v: v['_tone_key'],
         'count': lambda v: v['count'],
         'level': lambda v: v['_box'],
         'due': lambda v: v['_due'] or '',
+    }
+
+    FILTER_TOKENS = {
+        'initial': lambda v: v['_initials'],
+        'final': lambda v: v['_finals'],
+        'tone': lambda v: v['_tones'],
+    }
+
+    TOKEN_KEYS = {
+        'initial': lambda t: jyutping.sort_key(t, '')[0],
+        'final': lambda t: jyutping.sort_key('b', t)[1],
+        'level': lambda t: t.count('●'),
+        'due': lambda t: {'new': -2, 'today': -1, 'tomorrow': 1}.get(t) or int(re.sub(r'\D', '', t) or 0),
     }
 
     def __init__(self, app):
@@ -631,11 +912,12 @@ class WordsPage(Page):
         self.summary = label(bar, '', size=13, color='muted')
         self.summary.pack(side=RIGHT, padx=14)
 
-        self.table = SortableTree(self, self.COLUMNS, self.SORT_KEYS, app.word_sort)
+        self.table = SortableTree(self, self.COLUMNS, self.SORT_KEYS, app.word_view, [('no', False)],
+                                  self.FILTER_TOKENS, self.TOKEN_KEYS, on_change=self.update_summary)
         self.table.tree.tag_configure('highlight', foreground=C['answer'])
         self.table.pack(fill=BOTH, expand=1, padx=16, pady=6)
 
-        label(self, 'Click a column header to sort  ·  highlighted words come first in flashcards',
+        label(self, 'Click header: sort  ·  Shift-click: add sort level  ·  right-click: filter  ·  drag header border: resize',
               size=12, color='muted').pack()
 
         buttonframe = Frame(self)
@@ -643,6 +925,7 @@ class WordsPage(Page):
         button(buttonframe, 'Highlight', self.highlight_item).pack(side=LEFT, padx=8)
         button(buttonframe, 'Delete', self.delete_item).pack(side=LEFT, padx=8)
         button(buttonframe, 'Clear', self.clear_items).pack(side=LEFT, padx=8)
+        button(buttonframe, 'Reset View', self.table.reset, width=110).pack(side=LEFT, padx=8)
 
         self.load_rows()
 
@@ -650,18 +933,22 @@ class WordsPage(Page):
         rows = []
         for n, (word, (pinyin, count, highlight)) in enumerate(self.new_w.items()):
             state = self.app.progress.word_state(word)
+            toned = with_tones(word, pinyin, self.tones)
             values = {
-                'word': word, 'pinyin': with_tones(word, pinyin, self.tones), 'count': count,
+                'word': word, 'pinyin': toned, 'count': count,
                 'level': level_dots(state['box']), 'due': until(state['due']),
                 '_order': n, '_box': state['box'], '_due': state['due'],
+                **sound_columns(pinyin, toned),
             }
             rows.append((word, values, ('highlight',) if highlight == 1 else ()))
 
         self.table.rows = rows
         self.table.refresh(select)
 
+    def update_summary(self, shown, total):
         due = len(self.app.progress.due_words(self.new_w))
-        self.summary.config(text=f'{len(self.new_w)} words  ·  {due} due today')
+        count = f'{shown} of {total} words shown' if shown != total else f'{total} words'
+        self.summary.config(text=f'{count}  ·  {due} due today')
 
     def highlight_item(self):
         word = self.table.selected()
@@ -869,8 +1156,8 @@ class App(Tk):
         center_window(self)
 
         self.progress = Progress()
-        self.song_sort = {'col': 'song', 'reverse': False}
-        self.word_sort = {'col': 'no', 'reverse': False}
+        self.song_view = {}
+        self.word_view = {}
         self.page = None
 
         menubar(self, [
