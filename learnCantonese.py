@@ -121,7 +121,7 @@ def display_lyrics(l_dir):
 
     # get length of ls
     l_s = [len(x) for x in en_l]
-    t_cn_l = [list(re.sub('\s+', '', x)) for x in cn_l]
+    t_cn_l = [list(re.sub(r'\s+', '', x)) for x in cn_l]
 
     o_l = [] 
     for i in range(len(t_cn_l)):
@@ -160,15 +160,28 @@ def get_html_part(url, part):
     return BeautifulSoup(f, 'html.parser').find(part)
 
 def download_lyric(song_info):
+    """ Download lyrics of (song id, singer, song) and save them as data/songs/<song>.txt.
+        Fetch everything first so a failed download doesn't leave an empty file.
+    """
+    url = f'https://www.feitsui.com/zh-hans/lyrics/{song_info[0]}'
+    response = requests.get(url, timeout=15)
+    response.raise_for_status()
+
+    article = BeautifulSoup(response.content, 'html.parser').find('article')
+    if article is None:
+        raise ValueError('No lyrics found on the page')
+
+    lines = []
+    for p in article.find_all('p'):
+        for l in p.contents:
+            if '<' not in str(l):
+                lines.append(str(l).replace('翡翠粤语歌词', '').strip())
+
+    if not any(lines):
+        raise ValueError('No lyrics found on the page')
 
     with open(f'data/songs/{song_info[2]}.txt', 'w') as lyric_f:
-        url = f'https://www.feitsui.com/zh-hans/lyrics/{song_info[0]}'
-        parent = get_html_part(url, 'body')
-
-        for p in parent.find('article').find_all('p'):
-            for l in p.contents:
-                if '<' not in str(l):
-                    lyric_f.write(str(l).replace('翡翠粤语歌词', '').strip() + '\n')
+        lyric_f.write('\n'.join(lines) + '\n')
 
 def learn_new_words():
     """ Check new words book.
