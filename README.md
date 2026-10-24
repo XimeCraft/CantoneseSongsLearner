@@ -31,3 +31,8 @@ ln -s "$PY_LIB/tcl8.6" "$PY_LIB/tk8.6" .venv/lib/
 
 .venv/bin/python app.py
 ```
+
+To launch it like a normal Mac app (Launchpad, Spotlight, Dock), run `./make_app.sh` once.
+It creates `~/Applications/Learning Cantonese.app`, which runs `app.py` from this folder,
+so code changes apply immediately. Rerun it if you move the project folder.
+Errors are logged to `~/Library/Logs/LearningCantonese.log`.
