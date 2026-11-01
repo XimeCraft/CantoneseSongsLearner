@@ -1,26 +1,36 @@
-# README
-## Introduction
-This application is designed to help users improve their Cantonese prounciation skills of Cantonese songs by providing a way to practice Cantonese pinyin for Chinese lyrics. The application allows users to search for a song by its name, and then displays the Chinese lyrics sentence by sentence along with a text box for the user to type in the corresponding Cantonese pinyin. The application also keeps track of the user's incorrect pinyin inputs, allowing them to review and practice those specific sentences.
+# Learning Cantonese 粤语歌学习
 
-## Features
-1. Use web crawling to get lyrics online by searching sonngs by name.
-2. Display Chinese lyrics sentence by sentence with a text box for the user to type in the corresponding Cantonese pinyin
-3. Keep track of incorrect pinyin inputs for review and practice
-4. Display the whole Chinese lyrics and corresponding Cantonese pinyin.
+通过粤语歌练习粤语拼音。 / Learn Jyutping through Cantonese songs.
 
-## Usage
-1. Open the application from app.py
-2. Select Songs: 
-   1. Place to store all the incorrect for further review and self-correction
-3. Learn New Words:
-   1. display the Chinese lyrics sentence by sentence along with a text box for the user to type in the corresponding Cantonese pinyin
-   2. track of any incorrect pinyin inputs for review and practice
+## 开始之前 / Before you start
 
-## Note
-Please be aware that the application uses web crawling to get Chinese lyrics and corresponding Cantonese pinyin from a website which already contains that information and it's not 100% accurate. It's important to note that the application is for practice and reference only and should not be used as an official source for Cantonese pinyin.
+使用前请先了解粤语拼音。 / Please learn the basics of Jyutping first.
 
-## Setup
-Requires [uv](https://docs.astral.sh/uv/) (macOS; the UI uses `tkmacosx`).
+- YouTube: https://www.youtube.com/watch?v=y0D7j03GWXc&t=14s
+- Bilibili（无法访问 YouTube 时 / if YouTube is unavailable）: https://www.bilibili.com/video/BV1kU4y1r7qR/
+
+## 安装 / Install
+
+仅支持 M 系列芯片的 Mac。 / Apple Silicon Macs only.
+
+**[下载 / Download LearningCantonese.dmg](https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese.dmg)**
+
+1. 打开 DMG，把应用拖到 Applications。 / Open the DMG and drag the app to Applications.
+2. 双击打开应用。macOS 会拦下，点“完成”。 / Open the app. macOS will block it; click "Done".
+3. 打开“系统设置 → 隐私与安全性”，点“仍要打开”。 / In System Settings → Privacy & Security, click "Open Anyway".
+
+## 使用 / How to use
+
+1. **Select Songs**：选一首歌，看着歌词输入拼音。 / Pick a song and type the Jyutping for each line.
+2. **Word Book**：查看打错的字。 / Review the words you got wrong.
+3. **Flashcards**：用闪卡复习这些字。 / Practise those words with flashcards.
+
+你的练习记录只保存在自己的电脑上。 / Your progress stays on your own Mac.
+
+<details>
+<summary>开发者 / Developers</summary>
+
+Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv venv --python 3.12 .venv
@@ -32,7 +42,7 @@ ln -s "$PY_LIB/tcl8.6" "$PY_LIB/tk8.6" .venv/lib/
 .venv/bin/python app.py
 ```
 
-To launch it like a normal Mac app (Launchpad, Spotlight, Dock), run `./make_app.sh` once.
-It creates `~/Applications/Learning Cantonese.app`, which runs `app.py` from this folder,
-so code changes apply immediately. Rerun it if you move the project folder.
-Errors are logged to `~/Library/Logs/LearningCantonese.log`.
+- `./make_app.sh`: creates `~/Applications/Learning Cantonese.app`, which runs `app.py` from this folder.
+- `./make_dmg.sh`: builds `dist/LearningCantonese.dmg`, without your word book or progress.
+
+</details>

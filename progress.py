@@ -22,7 +22,8 @@ class Progress:
     {
         "last_song": "一生中最爱",
         "songs": {"一生中最爱": {"sessions": 3, "position": 5, "done": [0, 1, 2],
-                                 "checked": 40, "wrong": 6, "last": "2026-10-24T12:00:00"}},
+                                 "checked": 40, "wrong": 6, "last": "2026-10-24T12:00:00",
+                                 "misses": {"讲": 2, "会": 1}}},
         "words": {"讲": {"box": 2, "due": "2026-10-26", "reviews": 3, "correct": 2}}
     }
     """
@@ -52,7 +53,8 @@ class Progress:
 
     def _song(self, name):
         return self.data['songs'].setdefault(
-            name, {'sessions': 0, 'position': 0, 'done': [], 'checked': 0, 'wrong': 0, 'last': None})
+            name, {'sessions': 0, 'position': 0, 'done': [], 'checked': 0, 'wrong': 0, 'last': None,
+                   'misses': {}})
 
     def start_session(self, name):
         s = self._song(name)
@@ -65,12 +67,16 @@ class Progress:
         self._song(name)['position'] = line
         self.save()
 
-    def record_check(self, name, line, checked, wrong):
+    def record_check(self, name, line, checked, wrong, missed=()):
+        """missed: the characters got wrong on this line, one entry per wrong syllable."""
         s = self._song(name)
         if line not in s['done']:
             s['done'].append(line)
         s['checked'] += checked
         s['wrong'] += wrong
+        misses = s.setdefault('misses', {})
+        for word in missed:
+            misses[word] = misses.get(word, 0) + 1
         self.save()
 
     def remove_song(self, name):
@@ -78,6 +84,21 @@ class Progress:
         if self.data['last_song'] == name:
             self.data['last_song'] = None
         self.save()
+
+    def song_misses(self, name):
+        """{word: times got wrong} while practising this song."""
+        return self.data['songs'].get(name, {}).get('misses', {})
+
+    def songs_with_misses(self):
+        return [name for name, s in self.data['songs'].items() if s.get('misses')]
+
+    def misses_by_word(self):
+        """{word: {song: times got wrong}}, songs with the most mistakes first."""
+        by_word = {}
+        for name, s in self.data['songs'].items():
+            for word, n in s.get('misses', {}).items():
+                by_word.setdefault(word, {})[name] = n
+        return {w: dict(sorted(songs.items(), key=lambda x: -x[1])) for w, songs in by_word.items()}
 
     def song_summary(self, name, total):
         s = self.data['songs'].get(name)
@@ -123,11 +144,14 @@ class Progress:
         self.save()
 
     def demote(self, word, today=None):
-        """Got the word wrong again while practising a song: review it again soon."""
+        """Got the word wrong again while practising a song: review it again today."""
         state = self.data['words'].get(word)
-        if state and state['box'] > 1:
+        if state is None:
+            return
+        due = (today or date.today()).isoformat()
+        if state['box'] > 1 or (state['box'] == 1 and (state['due'] or '') > due):
             state['box'] = 1
-            state['due'] = (today or date.today()).isoformat()
+            state['due'] = due
             self.save()
 
     def order_words(self, new_w):
@@ -149,8 +173,12 @@ class Progress:
 
     def remove_word(self, word):
         self.data['words'].pop(word, None)
+        for s in self.data['songs'].values():
+            s.get('misses', {}).pop(word, None)
         self.save()
 
     def clear_words(self):
         self.data['words'] = {}
+        for s in self.data['songs'].values():
+            s['misses'] = {}
         self.save()

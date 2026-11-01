@@ -96,6 +96,18 @@ def apply(root):
                     bordercolor=C['surface'], lightcolor=C['accent'], darkcolor=C['accent'])
     style.configure('TCheckbutton', background=C['bg'], foreground=C['fg'], font=font(13))
     style.map('TCheckbutton', background=[('active', C['bg'])])
+    style.configure('TCombobox', fieldbackground=C['surface'], background=C['surface2'],
+                    foreground=C['fg'], arrowcolor=C['muted'], bordercolor=C['surface2'],
+                    lightcolor=C['surface'], darkcolor=C['surface'], padding=(8, 4))
+    style.map('TCombobox', fieldbackground=[('readonly', C['surface'])],
+              foreground=[('readonly', C['fg'])],
+              selectbackground=[('readonly', C['surface'])],
+              selectforeground=[('readonly', C['fg'])],
+              background=[('active', C['surface2']), ('pressed', C['surface2'])])
+    for opt, value in (('background', C['surface']), ('foreground', C['fg']),
+                       ('selectBackground', C['accent']), ('selectForeground', C['on_accent'])):
+        root.option_add(f'*TCombobox*Listbox.{opt}', value)
+    root.option_add('*TCombobox*Listbox.font', font(13))
 
 
 def button(parent, text, command, width=150, accent=False):

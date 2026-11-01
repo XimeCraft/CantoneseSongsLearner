@@ -2,3 +2,8 @@
 **/.DS_Store
 __pycache__/
 .venv/
+build/
+dist/
+data/new words.json
+data/new words copy.json
+data/progress.json
