@@ -11,14 +11,17 @@
 
 <p align="center">
   <a href="https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese.dmg">
-    <img src="https://img.shields.io/badge/Download-LearningCantonese.dmg-2B57B7?style=for-the-badge&logo=apple&logoColor=white" alt="Download LearningCantonese.dmg">
+    <img src="https://img.shields.io/badge/Download-Apple%20Silicon%20(M1–M4)-2B57B7?style=for-the-badge&logo=apple&logoColor=white" alt="Download for Apple Silicon">
+  </a>
+  <a href="https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese-Intel.dmg">
+    <img src="https://img.shields.io/badge/Download-Intel-555555?style=for-the-badge&logo=apple&logoColor=white" alt="Download for Intel">
   </a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/github/v/release/XimeCraft/CantoneseSongsLearner?label=release" alt="Latest release">
   <img src="https://img.shields.io/github/downloads/XimeCraft/CantoneseSongsLearner/total?label=downloads" alt="Downloads">
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-333333?logo=apple&logoColor=white" alt="macOS Apple Silicon">
+  <img src="https://img.shields.io/badge/macOS-10.15%2B%20·%20Apple%20Silicon%20%26%20Intel-333333?logo=apple&logoColor=white" alt="macOS 10.15+, Apple Silicon and Intel">
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
 </p>
 
@@ -46,9 +49,14 @@ Two handy references: the [Jyutping chart at jyutping.org](https://jyutping.org/
 
 ## Install
 
-Apple Silicon (M-series) Macs only. On an Intel Mac, [run from source](#developers).
+Pick the download for your Mac's chip (Apple menu → About This Mac, look at "Chip" or "Processor"):
 
-**[Download LearningCantonese.dmg](https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese.dmg)**
+| Your Mac | Download |
+|---|---|
+| Apple silicon (M1, M2, M3, M4…) | **[LearningCantonese.dmg](https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese.dmg)** |
+| Intel (the Processor line says Intel), macOS 10.15 or later | **[LearningCantonese-Intel.dmg](https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese-Intel.dmg)** |
+
+The Intel build also runs on Apple silicon through Rosetta, but more slowly, so M-series Macs should take the first one.
 
 1. Open the DMG and drag Learning Cantonese to Applications.
 2. Open the app. It isn't notarised by Apple, so macOS blocks it: click "Done" (not "Move to Trash").
@@ -188,7 +196,7 @@ The DMG app keeps them in `~/Library/Application Support/Learning Cantonese/`; r
 
 **macOS says the app is damaged or can't verify the developer.** The app isn't signed by Apple. Use "Open Anyway" in Privacy & Security as in step 3 of the install guide, or run `xattr -dr com.apple.quarantine "/Applications/Learning Cantonese.app"`.
 
-**Does it run on an Intel Mac?** The DMG is Apple Silicon only. On an Intel Mac, run from source as described under Developers.
+**Does it run on an Intel Mac?** Yes. Download the Intel DMG; it needs macOS 10.15 Catalina or later.
 
 **Why is my answer wrong when I type the tone?** Practice and flashcards compare only initials and finals; leave the tone numbers out. The lyrics page and the check results show the readings with tones for reference.
 
@@ -218,7 +226,8 @@ Scripts:
 | Command | What it does |
 |---|---|
 | `./make_app.sh` | Creates `~/Applications/Learning Cantonese.app`, which runs `app.py` from this folder: code changes take effect immediately and data stays in `data/` |
-| `./make_dmg.sh` | Builds a standalone app with PyInstaller into `dist/LearningCantonese.dmg` (songs only, never your word book or progress) |
+| `./make_dmg.sh` | Builds a standalone Apple silicon app with PyInstaller into `dist/LearningCantonese.dmg` (songs only, never your word book or progress) |
+| `./make_dmg.sh intel` | Builds the Intel version `dist/LearningCantonese-Intel.dmg` on an Apple silicon Mac through Rosetta; runs on macOS 10.15+ |
 | `uv run --python 3.12 --with-requirements requirements.txt --with pyobjc-framework-Cocoa tools/screenshots.py` | Regenerates the README screenshots in `docs/screenshots/`. Runs on a temporary copy of `data/`, so your data is untouched |
 | `uv run --with pillow python tools/make_icon.py assets` | Redraws the app icon (icns / ico / jpg) |
 | `.venv/bin/python tools/backfill_song_misses.py` | One-off: attributes early word book mistakes to songs from the git history |
@@ -226,8 +235,8 @@ Scripts:
 Publishing a release:
 
 ```bash
-./make_dmg.sh
-gh release create v1.1 dist/LearningCantonese.dmg --title "v1.1" --notes "What changed"
+./make_dmg.sh && ./make_dmg.sh intel
+gh release create v1.1 dist/LearningCantonese.dmg dist/LearningCantonese-Intel.dmg --title "v1.1" --notes "What changed"
 ```
 
 Project layout:

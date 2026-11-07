@@ -11,14 +11,17 @@
 
 <p align="center">
   <a href="https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese.dmg">
-    <img src="https://img.shields.io/badge/Download-LearningCantonese.dmg-2B57B7?style=for-the-badge&logo=apple&logoColor=white" alt="下载 LearningCantonese.dmg">
+    <img src="https://img.shields.io/badge/下载-Apple%20芯片%20(M1–M4)-2B57B7?style=for-the-badge&logo=apple&logoColor=white" alt="下载 Apple 芯片版">
+  </a>
+  <a href="https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese-Intel.dmg">
+    <img src="https://img.shields.io/badge/下载-Intel%20芯片-555555?style=for-the-badge&logo=apple&logoColor=white" alt="下载 Intel 版">
   </a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/github/v/release/XimeCraft/CantoneseSongsLearner?label=release" alt="最新版本">
   <img src="https://img.shields.io/github/downloads/XimeCraft/CantoneseSongsLearner/total?label=downloads" alt="下载次数">
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-333333?logo=apple&logoColor=white" alt="macOS Apple Silicon">
+  <img src="https://img.shields.io/badge/macOS-10.15%2B%20·%20Apple%20Silicon%20%26%20Intel-333333?logo=apple&logoColor=white" alt="macOS 10.15+，Apple 芯片和 Intel">
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
 </p>
 
@@ -46,9 +49,14 @@
 
 ## 安装
 
-仅支持 Apple Silicon（M 系列芯片）的 Mac。Intel Mac 可以[从源码运行](#开发者)。
+按你的 Mac 芯片选择下载（点屏幕左上角的苹果菜单 → 关于本机，看"芯片"或"处理器"一栏）：
 
-**[下载 LearningCantonese.dmg](https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese.dmg)**
+| 你的 Mac | 下载 |
+|---|---|
+| Apple 芯片（M1、M2、M3、M4…） | **[LearningCantonese.dmg](https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese.dmg)** |
+| Intel 芯片（处理器一栏写着 Intel），macOS 10.15 及以上 | **[LearningCantonese-Intel.dmg](https://github.com/XimeCraft/CantoneseSongsLearner/releases/latest/download/LearningCantonese-Intel.dmg)** |
+
+Intel 版也能在 Apple 芯片的 Mac 上通过 Rosetta 运行，但会慢一些，M 系列请下载第一个。
 
 1. 打开 DMG，把 Learning Cantonese 拖到 Applications。
 2. 双击打开。应用没有经过 Apple 公证，macOS 会拦下，点"完成"（不要点"移到废纸篓"）。
@@ -188,7 +196,7 @@ DMG 版放在 `~/Library/Application Support/Learning Cantonese/`，源码运行
 
 **打开时提示"已损坏，无法打开"或"无法验证开发者"？** 应用没有 Apple 签名。按安装第 3 步在"隐私与安全性"里点"仍要打开"，或者运行 `xattr -dr com.apple.quarantine "/Applications/Learning Cantonese.app"`。
 
-**Intel Mac 能用吗？** DMG 只有 Apple Silicon 版本，Intel Mac 请按下面"开发者"一节从源码运行。
+**Intel Mac 能用吗？** 能，下载 Intel 版 DMG 即可，需要 macOS 10.15 Catalina 或更新。
 
 **打了声调为什么算错？** 练习和闪卡都只比对声母和韵母，不要打数字声调。歌词页和检查结果里会显示带声调的读音供参考。
 
@@ -218,7 +226,8 @@ ln -s "$PY_LIB/tcl8.6" "$PY_LIB/tk8.6" .venv/lib/
 | 命令 | 作用 |
 |---|---|
 | `./make_app.sh` | 在 `~/Applications` 生成 Learning Cantonese.app，直接运行本目录的 `app.py`：改代码即时生效，数据仍在 `data/` |
-| `./make_dmg.sh` | 用 PyInstaller 打包成独立应用，生成 `dist/LearningCantonese.dmg`（只带歌词，不带你的生词本和进度） |
+| `./make_dmg.sh` | 用 PyInstaller 打包成独立应用，生成 Apple 芯片版 `dist/LearningCantonese.dmg`（只带歌词，不带你的生词本和进度） |
+| `./make_dmg.sh intel` | 在 Apple 芯片 Mac 上借助 Rosetta 打包 Intel 版 `dist/LearningCantonese-Intel.dmg`，最低支持 macOS 10.15 |
 | `uv run --python 3.12 --with-requirements requirements.txt --with pyobjc-framework-Cocoa tools/screenshots.py` | 重新生成 `docs/screenshots/` 里的 README 截图。在 `data/` 的临时副本上运行，不会改动你的数据 |
 | `uv run --with pillow python tools/make_icon.py assets` | 重绘应用图标（icns / ico / jpg） |
 | `.venv/bin/python tools/backfill_song_misses.py` | 一次性脚本：根据 git 历史把早期的错字归属到歌曲 |
@@ -226,8 +235,8 @@ ln -s "$PY_LIB/tcl8.6" "$PY_LIB/tk8.6" .venv/lib/
 发布新版本：
 
 ```bash
-./make_dmg.sh
-gh release create v1.1 dist/LearningCantonese.dmg --title "v1.1" --notes "更新说明"
+./make_dmg.sh && ./make_dmg.sh intel
+gh release create v1.1 dist/LearningCantonese.dmg dist/LearningCantonese-Intel.dmg --title "v1.1" --notes "更新说明"
 ```
 
 项目结构：
